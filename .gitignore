@@ -67,3 +67,4 @@ vapid_*.txt
 vapid_*.json
 .vapid_keys
 dashboard.html
+methodology_dashboard.py
