@@ -45,3 +45,13 @@ Use **GitHub Issues** for backlog items, bugs, and cross-project coordination. D
 - View issues: `gh issue list`
 - Create issue: `gh issue create --title "..." --body "..."`
 - Cross-project issues: use the target repo's issue tracker
+
+## Project-Specific Methodology Adaptations
+
+### Project-specific Learnings
+
+Project learnings recorded by sessions in this repo. Per methodology v2.6.1+ (Phase 3C), project learnings live here in `CLAUDE.md`, not in the synced `SESSION_RUNNER.md` Learnings table — that table is kept byte-identical to canonical so `methodology/bin/sync` can upgrade it. (Migrated here from the project's `SESSION_RUNNER.md` Learnings table during the v2.8 sync.)
+
+| # | Learning | Source | When to Apply |
+|---|----------|--------|---------------|
+| 1 | "Update the methodology" means: fetch from GitHub (`KJ5HST/methodology`), diff all methodology files against the remote, and sync any changes. Don't ask for clarification — just do it. Use `gh api` to fetch files, not the local sibling repo. | Session 1–2 | When user says "update methodology" or similar — fetch from GitHub and diff. |

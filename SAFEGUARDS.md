@@ -46,7 +46,7 @@ If there are uncommitted changes from a previous session, **do not touch them**.
 | Rule | Why |
 |------|-----|
 | **Commit before any multi-file change** | Every disaster becomes a `git checkout` instead of a multi-hour recovery |
-| **Never touch more than 5 files without committing first** | Forces incremental, recoverable progress |
+| **Never touch more than 5 files without committing first** — the cap is *per-commit*, not per-session | Forces incremental, recoverable progress. A pre-declared vertical slice (`SESSION_RUNNER.md` §Vertical Slice Sessions) may touch more than 5 files across a session, but never more than 5 between checkpoint commits. |
 | **Never refactor across module boundaries without plan mode** | Cross-module refactoring is Architect Mode work, period |
 | **Never delete a file without verifying it's committed** | `git log --oneline -- <file>` before `rm`. No shortcuts. |
 | **Never rename/move files as part of a "quick fix"** | Renames cascade. They are never quick. |
@@ -67,6 +67,46 @@ These phrases signal a mode switch is happening. The correct response is: **comm
 
 ---
 
+## Artifact Integrity
+
+### Read Before Edit
+
+**Re-read any file immediately before modifying it.** Do not edit from memory of a prior read. Memory degrades across long sessions — especially after context compaction. If you haven't read the target section in the last 5 minutes, read it now. This applies to code, documents, configuration files, and any other artifact.
+
+### Preserve User Edits
+
+The user may modify files outside your session — in another editor, between sessions, or through manual intervention. **Never overwrite user-modified content without confirmation.** Check `git blame` or system-reminders to determine if a file has been modified by the user. When in doubt, ask before regenerating.
+
+### Verify the Build Equivalent
+
+Every project has a "build equivalent" — the command that confirms the deliverable is not broken:
+
+| Project Type | Build Equivalent | Verification |
+|---|---|---|
+| Software | `make`, `npm run build`, `cargo build` | Compilation succeeds |
+| Documentation (Quarto, LaTeX) | `quarto render`, `pdflatex` | Document renders without errors |
+| Data pipeline | Pipeline execution | Output data are produced correctly |
+| Configuration | Linting, schema validation | Config passes validation |
+
+**Identify your project's build equivalent during setup and run it after every substantive change.** A deliverable that doesn't pass its build equivalent is broken, regardless of how correct it looks in the source.
+
+For documentation projects, rendering also verifies cross-references, citations, and figure generation — failures in any of these indicate broken content that must be fixed before committing.
+
+### Verify Render-Dependency Completeness
+
+**Build success is not asset-use success.** A render can succeed while silently using different assets than configured: a font family resolves to its Regular face but missing Italic / Bold faces fall back to a default; a CSL file resolves but is the wrong style version; a LaTeX template resolves but a missing class option is silently ignored; a figure-generation script imports a library version different from the one specified. The output looks valid and the build exits cleanly. The defect is invisible unless something checks for it.
+
+If your build produces rendered output that depends on external assets (fonts, citation styles, templates, figure libraries), the build-equivalent check above is necessary but not sufficient. Two additional checks apply:
+
+| When | Check | Rule | Why |
+|---|---|---|---|
+| **Post-render** (every build) | Confirm the rendered output uses the assets it was configured to use (e.g., `pdffonts` shows all expected font faces embedded, not just the family name) | **Hard rule** — part of the build-equivalent step. Failure blocks the commit. | Catches silent fallback that survives correct-looking static config. |
+| **Pre-render / setup** (when render-dep config changes) | Confirm each configured asset actually provides the faces / version / features the document uses (e.g., `fc-list "<family>"` returns each expected face; `kpsewhich <Italic-file>` resolves; the CSL version matches the cited style) | **Soft prompt** — surfaces at Phase 0 when render-dep config changes; project decides response based on its toolchain. | Catches mis-configuration without requiring a render. |
+
+A deliverable that compiles, renders, and embeds the right assets is correct. A deliverable that compiles and renders but embeds fallback assets is broken in a way the build will not tell you about — find it before the reader does. See domain workstreams (e.g., `docs/methodology/workstreams/RESEARCH_DOCUMENTATION_WORKSTREAM.md` for research papers) for toolchain-specific verification commands.
+
+---
+
 ## Session Recovery Protocol
 
 **After any session crash, model upgrade, or fresh start, follow this checklist IN ORDER before taking any action:**
@@ -74,7 +114,7 @@ These phrases signal a mode switch is happening. The correct response is: **comm
 ### Step 1: Orient (Read Only — Change Nothing)
 ```
 1. Read SESSION_NOTES.md          — What was the last session doing?
-2. Check GitHub Issues (`gh issue list`) — What are the current priorities? (Fall back to BACKLOG.md if no repo)
+2. Check GitHub Issues (`gh issue list`) — What are the current priorities? (Fall back to BACKLOG.md if no repo. BACKLOG.md should contain only open work items — for history see `CHANGELOG.md`, for feature inventory see `ROADMAP.md`.)
 3. Read SAFEGUARDS.md             — Refresh the rules (this file)
 4. git status                     — What's committed? What's not?
 5. git log --oneline -10          — What were the recent commits?
