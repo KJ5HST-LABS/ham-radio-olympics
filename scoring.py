@@ -41,7 +41,8 @@ class MatchingQSO:
     tx_power: float
     cool_factor: float
     role: str  # 'work', 'activate', or 'combined'
-    has_pota: bool  # competitor was at a park
+    has_pota: bool  # competitor was at a park (MY_SIG_INFO present)
+    dx_has_pota: bool = False  # worked station was at a park (DX_SIG_INFO present) — needed for true P2P
     is_confirmed: bool = True  # whether QSO is confirmed (False in live mode for unconfirmed)
 
 
@@ -364,6 +365,7 @@ def get_matching_qsos(
                 if valid and matches_target(qso, target_type, target_value, "work"):
                     role = "work" if separate_pools else "combined"
                     has_pota = bool(qso.get("my_sig_info"))
+                    dx_has_pota = bool(qso.get("dx_sig_info"))
 
                     matching.append(MatchingQSO(
                         qso_id=qso["id"],
@@ -375,6 +377,7 @@ def get_matching_qsos(
                         cool_factor=qso["cool_factor"] or 0,
                         role=role,
                         has_pota=has_pota,
+                        dx_has_pota=dx_has_pota,
                         is_confirmed=bool(qso.get("is_confirmed")),
                     ))
 
@@ -397,6 +400,7 @@ def get_matching_qsos(
 
                     role = "activate" if separate_pools else "combined"
                     has_pota = bool(qso.get("my_sig_info"))
+                    dx_has_pota = bool(qso.get("dx_sig_info"))
 
                     # Avoid duplicates if both modes enabled and not separate pools
                     if not (work_enabled and not separate_pools and
@@ -411,6 +415,7 @@ def get_matching_qsos(
                             cool_factor=qso["cool_factor"] or 0,
                             role=role,
                             has_pota=has_pota,
+                            dx_has_pota=dx_has_pota,
                             is_confirmed=bool(qso.get("is_confirmed")),
                         ))
 
@@ -465,9 +470,12 @@ def compute_medals(
             cool_factor_value = 0
             cool_factor_claim_time = earliest_qso.qso_datetime
 
-        # POTA bonus check
-        has_pota = any(q.has_pota for q in qsos)
-        pota_bonus = should_award_pota_bonus(target_type, role, has_pota)
+        # POTA bonus check (published rule, User Guide 4.3):
+        #   both stations at parks (true Park-to-Park) -> +2
+        #   target is a park OR competitor at a park   -> +1
+        has_pota = any(q.has_pota for q in qsos)  # competitor was at a park in any QSO
+        has_p2p = any(q.has_pota and q.dx_has_pota for q in qsos)  # genuine P2P: both ends at parks
+        pota_bonus = should_award_pota_bonus(target_type, has_pota, has_p2p)
 
         results.append(MedalResult(
             callsign=callsign,
@@ -514,30 +522,36 @@ def compute_medals(
     return results
 
 
-def should_award_pota_bonus(target_type: str, role: str, competitor_at_park: bool) -> int:
+def should_award_pota_bonus(target_type: str, competitor_at_park: bool, is_p2p: bool) -> int:
     """
     Determine POTA bonus points to award.
 
-    Logic:
-    - Park-to-Park (POTA target + competitor at park): +2
-    - POTA target OR competitor at park: +1
-    - Neither: +0
+    Matches the published rules (User Guide 4.3 "POTA Bonuses"):
+    - Park-to-Park (BOTH stations at parks): +2
+    - Target is a park OR competitor at a park: +1
+    - No park involvement: +0
+
+    Note: `is_p2p` requires BOTH ends at a park (MY_SIG_INFO and DX_SIG_INFO). It is
+    not enough for the competitor to be at a park during a park-targeted match — the
+    worked station must also be at a park. This is what distinguishes a genuine
+    Park-to-Park contact from an ordinary activation, and mirrors the Triathlon
+    scorer's definition (compute_triathlon_leaders).
 
     Args:
         target_type: Sport's target type
-        role: 'work', 'activate', or 'combined'
-        competitor_at_park: Whether competitor has MY_SIG_INFO
+        competitor_at_park: Whether competitor has MY_SIG_INFO in any matching QSO
+        is_p2p: Whether any matching QSO has BOTH MY_SIG_INFO and DX_SIG_INFO
 
     Returns:
         Bonus points (0, 1, or 2)
     """
     is_pota_target = target_type in ("park", "pota")
 
-    if is_pota_target and competitor_at_park:
-        # Park-to-Park: +2
+    if is_p2p:
+        # Park-to-Park: both stations at parks -> +2
         return 2
     elif is_pota_target or competitor_at_park:
-        # Either POTA target or competitor at park: +1
+        # Single park involvement (park target or competitor at a park) -> +1
         return 1
     else:
         # No POTA involvement

@@ -380,6 +380,57 @@ class TestPOTABonus:
         assert medal["pota_bonus"] == 2  # Park-to-park!
         assert medal["total_points"] == 8  # 3 + 3 + 2
 
+    def test_activation_without_p2p_gets_1_point(self, client, admin_headers):
+        """Regression for issue #2 (the N5VYS scenario): activating a park while working
+        NON-park stations is a single-park activation (+1), NOT park-to-park (+2). Before
+        the fix, any activation in a park-targeted match incorrectly scored +2."""
+        client.post("/admin/olympiad", json={
+            "name": "2026 Olympics",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        client.post("/admin/olympiad/1/activate", headers=admin_headers)
+        client.post("/admin/olympiad/1/sport", json={
+            "name": "POTA",
+            "target_type": "park",
+            "work_enabled": False,
+            "activate_enabled": True,
+            "separate_pools": False
+        }, headers=admin_headers)
+        client.post("/admin/sport/1/match", json={
+            "start_date": "2026-01-01T00:00:00",
+            "end_date": "2026-01-07T23:59:59",
+            "target_value": "K-0001"
+        }, headers=admin_headers)
+
+        signup_user(client, "W1ACT")
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
+                ("W1ACT", 1, "2026-01-01T00:00:00")
+            )
+
+        # Activate K-0001: 10 confirmed QSOs same UTC day, all to NON-park stations (no dx_sig_info)
+        with get_db() as conn:
+            for i in range(10):
+                conn.execute("""
+                    INSERT INTO qsos (
+                        competitor_callsign, dx_callsign, qso_datetime_utc,
+                        tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, is_confirmed,
+                        distance_km, cool_factor
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
+                """, ("W1ACT", f"N{i}DX", f"2026-01-05T12:{i:02d}:00", 5.0, "EM12", "K-0001", "FN31", 291))
+
+        recompute_match_medals(1)
+
+        with get_db() as conn:
+            cursor = conn.execute("SELECT pota_bonus FROM medals WHERE callsign = ?", ("W1ACT",))
+            medal = cursor.fetchone()
+
+        assert medal is not None, "Activator should have a medal row"
+        assert medal["pota_bonus"] == 1, "Plain activation (no P2P) must be +1, not +2"
+
 
 class TestSeparatePools:
     """Test separate work/activate pools."""

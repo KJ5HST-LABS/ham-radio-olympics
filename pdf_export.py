@@ -634,8 +634,8 @@ class OlympicsPDF(FPDF):
                 icon_y = y_cf + (row_height - icon_size) / 2
                 self.image(io.BytesIO(icon_bytes), x=icon_x, y=icon_y, w=icon_size, h=icon_size)
 
-            # POTA
-            pota = "+1" if entry.get("pota_bonus") else "-"
+            # POTA (show actual bonus: +1 single park, +2 Park-to-Park)
+            pota = f"+{entry['pota_bonus']}" if entry.get("pota_bonus") else "-"
             self.cell(col_widths[4], row_height, pota, border=1, fill=True, align="C")
 
             # Points

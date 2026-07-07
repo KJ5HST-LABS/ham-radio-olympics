@@ -374,62 +374,76 @@ class TestMedalComputation:
 
 
 class TestPOTABonus:
-    """Test POTA bonus logic."""
+    """Test POTA bonus logic (published rules, User Guide 4.3).
+
+    Signature: should_award_pota_bonus(target_type, competitor_at_park, is_p2p)
+      - is_p2p (BOTH stations at parks)  -> +2
+      - target is a park OR competitor at a park -> +1
+      - otherwise -> +0
+    """
 
     def test_park_to_park_gets_2_points(self):
-        """Test park-to-park contact gets +2 bonus."""
-        assert should_award_pota_bonus("park", "work", True) == 2
-        assert should_award_pota_bonus("park", "activate", True) == 2
+        """True P2P (both stations at parks) gets +2, regardless of target type."""
+        assert should_award_pota_bonus("park", True, True) == 2
+        assert should_award_pota_bonus("pota", True, True) == 2
+        # P2P is credited even in a non-park sport when both ends are at parks
+        assert should_award_pota_bonus("continent", True, True) == 2
+
+    def test_plain_activation_is_not_p2p(self):
+        """Fix for issue #2: a plain activation (competitor at a park, worked station
+        NOT at a park) gets +1, not +2. Previously any activation in a park-targeted
+        match incorrectly scored +2."""
+        assert should_award_pota_bonus("park", True, False) == 1
+        assert should_award_pota_bonus("pota", True, False) == 1
 
     def test_pota_target_without_park_gets_1_point(self):
-        """Test POTA target without competitor at park gets +1."""
-        assert should_award_pota_bonus("park", "work", False) == 1
-        assert should_award_pota_bonus("park", "activate", False) == 1
+        """Park target, competitor not at a park (e.g. hunting the target park from home) gets +1."""
+        assert should_award_pota_bonus("park", False, False) == 1
+        assert should_award_pota_bonus("pota", False, False) == 1
 
     def test_non_pota_target_with_park_gets_1_point(self):
-        """Test non-POTA target with competitor at park gets +1."""
-        assert should_award_pota_bonus("continent", "work", True) == 1
-        assert should_award_pota_bonus("grid", "activate", True) == 1
+        """Non-park target, competitor at a park (activated a park during a DX sport) gets +1."""
+        assert should_award_pota_bonus("continent", True, False) == 1
+        assert should_award_pota_bonus("grid", True, False) == 1
 
     def test_non_pota_target_without_park_gets_0_points(self):
-        """Test non-POTA target without park gets +0."""
-        assert should_award_pota_bonus("continent", "work", False) == 0
-        assert should_award_pota_bonus("grid", "activate", False) == 0
+        """Non-park target, no park involvement gets +0."""
+        assert should_award_pota_bonus("continent", False, False) == 0
+        assert should_award_pota_bonus("grid", False, False) == 0
 
     def test_all_target_types(self):
         """Test bonus logic for all target types."""
         non_pota_targets = ["continent", "country", "call", "grid"]
 
         for target in non_pota_targets:
-            # Without park - no bonus
-            assert should_award_pota_bonus(target, "work", False) == 0
-            assert should_award_pota_bonus(target, "activate", False) == 0
+            # No park at all - no bonus
+            assert should_award_pota_bonus(target, False, False) == 0
+            # Competitor at a park, but not P2P - +1
+            assert should_award_pota_bonus(target, True, False) == 1
+            # True P2P (both ends at parks) - +2
+            assert should_award_pota_bonus(target, True, True) == 2
 
-            # With park - +1 bonus
-            assert should_award_pota_bonus(target, "work", True) == 1
-            assert should_award_pota_bonus(target, "activate", True) == 1
+        for target in ("park", "pota"):
+            # Park target, hunting from home (no competitor park, not P2P) - +1
+            assert should_award_pota_bonus(target, False, False) == 1
+            # Park target, plain activation (competitor at a park, not P2P) - +1
+            assert should_award_pota_bonus(target, True, False) == 1
+            # Park-to-park - +2
+            assert should_award_pota_bonus(target, True, True) == 2
 
-        # POTA target without park - +1
-        assert should_award_pota_bonus("park", "work", False) == 1
-        assert should_award_pota_bonus("park", "activate", False) == 1
+    def test_compute_medals_plain_activation_vs_p2p(self):
+        """End-to-end through compute_medals (issue #2 regression): in a park sport a
+        plain activation (my park only) scores +1, while a genuine P2P (my park AND
+        dx park) scores +2. Before the fix both scored +2."""
+        # Plain activation: competitor at a park, worked station NOT at a park
+        plain = [MatchingQSO(1, "K1ACT", "N1DX", datetime(2026, 1, 1, 12, 0),
+                             1000, 5, 200, "combined", has_pota=True, dx_has_pota=False)]
+        assert compute_medals(plain, qualifying_qsos=0, target_type="park")[0].pota_bonus == 1
 
-        # Park-to-park - +2
-        assert should_award_pota_bonus("park", "work", True) == 2
-        assert should_award_pota_bonus("park", "activate", True) == 2
-
-    def test_pota_target_type_gets_bonus(self):
-        """Test that 'pota' target type (any park) also awards POTA bonus.
-
-        The 'pota' target type is for 'any park' sports (vs 'park' which is
-        for a specific park). Both should award POTA bonus.
-        """
-        # 'pota' target without competitor at park - +1
-        assert should_award_pota_bonus("pota", "work", False) == 1
-        assert should_award_pota_bonus("pota", "activate", False) == 1
-
-        # 'pota' target with competitor at park (P2P) - +2
-        assert should_award_pota_bonus("pota", "work", True) == 2
-        assert should_award_pota_bonus("pota", "activate", True) == 2
+        # Genuine P2P: both stations at parks
+        p2p = [MatchingQSO(1, "K1ACT", "N1DX", datetime(2026, 1, 1, 12, 0),
+                           1000, 5, 200, "combined", has_pota=True, dx_has_pota=True)]
+        assert compute_medals(p2p, qualifying_qsos=0, target_type="park")[0].pota_bonus == 2
 
 
 class TestDXCCContinent:
