@@ -5,13 +5,13 @@
 ---
 
 ## ACTIVE TASK
-**Task:** P2P (Park-to-Park) scoring defect — diagnosed Session 37. Fix NOT yet done.
-**Status:** Diagnosis complete (`docs/audits/diagnosis-2026-07-07-p2p-scoring.md`). Awaiting operator decision on intended P2P semantics before a fix session.
-**Plan:** None yet — the fix changes standings for all park-sport competitors and needs a full medal recompute, so it must be its own planned + approved session.
-**Priority:** Medium (live user-reported; not a data-loss/outage issue)
+**Task:** None active. P2P scoring defect (issue #2) fixed, deployed, and verified in Session 38.
+**Status:** Issue #2 CLOSED. Fix committed (`2d4a976`), deployed to prod (kd5dx), full medal recompute run, verified read-only on real data. Awaiting next assignment.
+**Priority:** —
 
 ### What You Must Do
-Do NOT implement the scoring change until the operator picks the intended behavior (see the diagnosis doc's "Recommended fixes": option 1 = make +2 mean true P2P (both parks); option 2 = keep flat activation bonus + reward P2P separately). Once decided: plan it (evidence-based inventory of `should_award_pota_bonus` callers + `pota_bonus` consumers), implement, then recompute all medals and verify N5VYS. Tracked in **GitHub issue #2** (https://github.com/KJ5HST-LABS/ham-radio-olympics/issues/2).
+Orient (SAFEGUARDS → this file → `gh issue list` → git status), then wait for the operator.
+⚠️ **State to know:** local `main` is ahead of `origin/main` (unpushed) and **prod was deployed from the local working tree**, so origin is behind what's running in prod. Push `main` when the operator OKs.
 
 ### How You Will Be Evaluated
 The user rates every session's handoff. Your handoff will be scored on:
@@ -23,6 +23,39 @@ The user rates every session's handoff. Your handoff will be scored on:
 ---
 
 *Session history accumulates below this line. Newest session at the top.*
+
+### What Session 38 Did — P2P Scoring Fix (issue #2) — DEPLOYED (2026-07-07)
+**Deliverable:** Fix the P2P bonus so +2 requires BOTH stations at parks (per published rules). **COMPLETE — committed, deployed, recomputed, verified.**
+**Commit:** `2d4a976` fix(scoring): require both stations at parks for P2P bonus (#2)
+
+**Decision:** Operator chose Option 1 (make the code match the published rules) after I showed the website already defines it: User Guide §4.3 — "Park-to-Park (both stations at parks): +2", single park "+1", and §4.5 caps a match at 8 pts (flat +2). Options 2/3 (volume scaling / separate P2P reward) would have required *rewriting* the published rules. So this was a bug (code out of spec), not an open product decision.
+
+**What was done:**
+- `scoring.py`: added `dx_has_pota` to `MatchingQSO`; threaded `dx_sig_info` through both append sites in `get_matching_qsos`; `compute_medals` derives genuine `has_p2p = any(my_park AND dx_park)`; rewrote `should_award_pota_bonus(target_type, competitor_at_park, is_p2p)` → +2 only for true P2P, +1 single park, +0 none. Now consistent with the triathlon scorer (`scoring.py:~1400`).
+- `pdf_export.py:638`: show actual bonus (+2) instead of hardcoded "+1".
+- Tests: rewrote `TestPOTABonus` unit tests; added a `compute_medals` regression test (`test_scoring.py`) and an activate-side integration test (the N5VYS scenario, `test_integration.py`). Full suite: **905 passed**; the 2 failures are pre-existing signup/QRZ tests, proven to fail on pristine code (stash test) — unrelated.
+- Deployed (`fly deploy -a kd5dx`, exit 0, healthy), then ran the full recompute in-container.
+
+**Verification (prod, real data, read-only):**
+- Active-olympiad `pota_bonus` rows: BEFORE {0:53, 1:66, 2:9} → AFTER {0:53, 1:60, 2:15}. Net effect was MORE +2s, not fewer — the old rule under-credited P2P made during non-park (DX/country) sports.
+- N5VYS: 117 → **119 pts**; +2 rows 6 → 8. His Continental-DX and Country-DX P2P now correctly earn +2 (were +1); plain park activations correctly +1; genuine park P2P stays +2.
+- Genuine-P2P (+2) holders now: N5VYS(8), KB5UTY(3), N5PBP(2), KI5IQE(1), KJ5FQY(1).
+- `pota_bonus` feeds `total_points` only → per-event gold/silver/bronze medals unchanged; only point totals shifted (small).
+
+**Gotchas / state for next session:**
+- ⚠️ `origin/main` is behind the deployed prod code (deploy used the local working tree). Push when operator OKs.
+- Prod recompute pattern that worked (WRITE): base64 a python script calling `sync.recompute_all_active_matches()` + `scoring.recompute_all_records()`, run via `fly ssh console -a kd5dx -C "/bin/sh -lc 'cd /app && echo <B64>|base64 -d|python3'"`. Read-only snapshots: open `file:/data/ham_olympics.db?mode=ro`.
+- Test env: no committed venv; deps need install. `pytest-asyncio==0.23.0` in requirements.txt breaks collection on pytest 8 ("'Package' object has no attribute 'obj'") — used `0.23.8` in a local gitignored `.venv`. Consider bumping requirements.txt (separate task).
+- Operator asked for a Discord message to competitors explaining the fix (drafted in-session; not a repo artifact).
+
+**Self-assessment: 9/10.**
+- (+) Turned an ambiguous "product decision" into a clear bug fix by checking the published rules — the decisive move. Grounded every step in code + real prod data. Unit + integration + regression tests; verified per-row on prod after recompute. Got explicit approval before the prod write.
+- (+) Caught and fixed a secondary consumer bug (PDF hardcoded +1) within scope.
+- (−) Over-predicted impact ("many scores will drop") before checking data; the real net was more +2s. Should have run the read-only preview before framing impact.
+- (−) Left `origin/main` unpushed while prod runs deployed-from-local code.
+
+### Session 37 Handoff Evaluation (by Session 38)
+**Score: 9/10.** Session 37's handoff is why this fix went fast and correct. The ACTIVE TASK block was decision-first and unambiguous ("do NOT implement until operator picks semantics"), key files were listed with exact line numbers (`should_award_pota_bonus`, `compute_medals`, the `has_pota` derivation, the triathlon contrast), and the flagged gotchas (MatchingQSO drops `dx_sig_info`; mandatory full recompute; the read-only prod query pattern) were exactly the traps I hit. Only miss: it deferred enumerating every `pota_bonus` consumer — which cost one grep, but that grep found the PDF consumer bug, so a net win. This is what a good handoff looks like.
 
 ### What Session 37 Did — P2P Scoring Diagnosis (2026-07-07)
 **Deliverable:** Diagnose why user N5VYS's Olympic score doesn't move on P2P QSOs. **COMPLETE.**
