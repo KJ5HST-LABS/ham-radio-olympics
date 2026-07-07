@@ -1119,8 +1119,17 @@ def backfill_records():
 def reset_db():
     """Reset the database (for testing)."""
     db_path = _get_database_path()
-    if os.path.exists(db_path):
-        os.remove(db_path)
+    # Remove the main DB file AND its WAL sidecars (-wal/-shm) and any rollback journal.
+    # Connections run in WAL mode (see get_connection), and SQLite only auto-removes the
+    # sidecars when the LAST connection closes. Under the full test suite a concurrent
+    # connection can still be open when reset_db runs, so removing only the main file
+    # leaves a stale -wal/-shm that mismatches the freshly recreated database on the next
+    # open -> intermittent "sqlite3.OperationalError: disk I/O error" on init_db's first
+    # read. Deleting the sidecars too is required by SQLite to safely delete a WAL db.
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        path = db_path + suffix
+        if os.path.exists(path):
+            os.remove(path)
     init_db()
 
 
