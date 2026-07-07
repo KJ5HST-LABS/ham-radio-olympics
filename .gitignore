@@ -71,3 +71,11 @@ methodology_dashboard.py
 
 # Session continuity — local-only (operator preference)
 SESSION_NOTES.md
+
+# Methodology framework — operational standard, not a project artifact (operator preference)
+SESSION_RUNNER.md
+SAFEGUARDS.md
+BOOTSTRAP.md
+CLAUDE_TEMPLATE.md
+RECOMMENDED_SKILLS.md
+docs/methodology/
