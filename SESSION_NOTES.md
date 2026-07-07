@@ -11,7 +11,7 @@
 **Priority:** Medium (live user-reported; not a data-loss/outage issue)
 
 ### What You Must Do
-Do NOT implement the scoring change until the operator picks the intended behavior (see the diagnosis doc's "Recommended fixes": option 1 = make +2 mean true P2P (both parks); option 2 = keep flat activation bonus + reward P2P separately). Once decided: plan it (evidence-based inventory of `should_award_pota_bonus` callers + `pota_bonus` consumers), implement, then recompute all medals and verify N5VYS. A tracking GitHub issue has not been filed yet — offer to file one.
+Do NOT implement the scoring change until the operator picks the intended behavior (see the diagnosis doc's "Recommended fixes": option 1 = make +2 mean true P2P (both parks); option 2 = keep flat activation bonus + reward P2P separately). Once decided: plan it (evidence-based inventory of `should_award_pota_bonus` callers + `pota_bonus` consumers), implement, then recompute all medals and verify N5VYS. Tracked in **GitHub issue #2** (https://github.com/KJ5HST-LABS/ham-radio-olympics/issues/2).
 
 ### How You Will Be Evaluated
 The user rates every session's handoff. Your handoff will be scored on:
@@ -38,7 +38,7 @@ The user rates every session's handoff. Your handoff will be scored on:
 
 **What's next (specific):**
 - Operator decides intended P2P semantics (diagnosis doc, "Recommended fixes" — option 1 vs 2).
-- Then a separate fix session: plan → implement → recompute all medals → verify N5VYS. Offer to file a GitHub issue to track.
+- Then a separate fix session: plan → implement → recompute all medals → verify N5VYS. Tracked in GitHub issue #2.
 
 **Key files / line numbers:**
 - `scoring.py:517-544` — `should_award_pota_bonus` (the defect; ignores `dx_sig_info`).
