@@ -143,15 +143,15 @@ class TestRegistration:
             assert response.status_code in [200, 303]
             mock_sync.assert_called_once_with("W1SYN", "test-api-key")
 
-    def test_signup_requires_qrz_or_lotw(self, client):
-        """Test that signup requires either QRZ API key or LoTW credentials."""
+    def test_signup_allows_optional_credentials(self, client):
+        """Signup without QRZ or LoTW credentials is allowed — they can be added
+        later via Settings (see the signup handler: credentials are optional)."""
         response = client.post("/signup", json={
             "callsign": "W1NOS",
             "password": "password123"
-            # No QRZ API key or LoTW credentials
+            # No QRZ API key or LoTW credentials — now permitted
         }, follow_redirects=False)
-        assert response.status_code == 400
-        assert "QRZ API key and/or LoTW" in response.json()["detail"]
+        assert response.status_code in (200, 303)
 
     def test_signup_succeeds_if_sync_fails(self, client):
         """Test that signup succeeds even if QRZ sync fails."""
@@ -2347,14 +2347,14 @@ class TestAuthEndpoints:
         assert response.status_code == 422
 
     def test_signup_empty_qrz_api_key(self, client):
-        """Test signup with empty QRZ API key and no LoTW credentials."""
+        """A whitespace-only QRZ key with no LoTW is treated as no credentials —
+        now allowed (credentials are optional)."""
         response = client.post("/signup", json={
             "callsign": "W1NOK",
             "password": "password123",
-            "qrz_api_key": "   "  # Whitespace only
-        })
-        assert response.status_code == 400
-        assert "QRZ API key and/or LoTW" in response.json()["detail"]
+            "qrz_api_key": "   "  # Whitespace only -> treated as no key
+        }, follow_redirects=False)
+        assert response.status_code in (200, 303)
 
     def test_login_page(self, client):
         """Test login page renders."""
