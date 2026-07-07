@@ -472,6 +472,10 @@ def init_db():
             if table_sql and 'sports_old' in table_sql[0]:
                 conn.execute("PRAGMA foreign_keys = OFF")
                 conn.execute("ALTER TABLE matches RENAME TO matches_old")
+                # Rebuild the FULL canonical matches schema (all columns, matching the
+                # CREATE TABLE below). A partial rebuild here truncates columns and, because
+                # the canonical column order differs from the ADD COLUMN order, an
+                # `INSERT ... SELECT *` would also misalign values. See issue #3.
                 conn.execute("""
                     CREATE TABLE matches (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -479,13 +483,20 @@ def init_db():
                         start_date TEXT NOT NULL,
                         end_date TEXT NOT NULL,
                         target_value TEXT NOT NULL,
+                        target_type TEXT,
                         allowed_modes TEXT,
                         max_power_w INTEGER,
-                        target_type TEXT,
+                        confirmation_deadline TEXT,
+                        show_live_results INTEGER NOT NULL DEFAULT 0,
                         FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
                     )
                 """)
-                conn.execute("INSERT INTO matches SELECT * FROM matches_old")
+                # Copy by explicit shared-column name so the migration is robust to column
+                # count/order drift between matches_old and the rebuilt matches table.
+                old_cols = [r[1] for r in conn.execute("PRAGMA table_info(matches_old)")]
+                new_cols = [r[1] for r in conn.execute("PRAGMA table_info(matches)")]
+                shared = ", ".join(c for c in new_cols if c in old_cols)
+                conn.execute(f"INSERT INTO matches ({shared}) SELECT {shared} FROM matches_old")
                 conn.execute("DROP TABLE matches_old")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_sport ON matches(sport_id)")
                 conn.execute("PRAGMA foreign_keys = ON")
