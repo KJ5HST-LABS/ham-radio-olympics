@@ -68,3 +68,6 @@ vapid_*.json
 .vapid_keys
 dashboard.html
 methodology_dashboard.py
+
+# Session continuity — local-only (operator preference)
+SESSION_NOTES.md
